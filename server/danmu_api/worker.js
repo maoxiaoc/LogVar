@@ -24,6 +24,19 @@ import {
 
 let globals;
 
+// 只在播放器响应中缩短来源显示名，内部匹配、缓存和下载仍使用原来源标识。
+async function withSourceDisplayNames(response) {
+  const names = { tencent: '腾讯', qq: '腾讯', qiyi: 'iqiyi', bilibili: 'B站', bilibili1: 'B站', dandan: '弹弹', renren: '人人', hanjutv: '韩剧TV' };
+  const rename = sources => sources.split(/([&＆])/).map(source => names[source] || source).join('');
+  const data = await response.json();
+  return new Response(JSON.stringify(data, (key, value) => {
+    if (typeof value !== 'string') return value;
+    if (key === 'animeTitle') return value.replace(/(from\s+)([a-zA-Z0-9&＆]+)/g, (_, prefix, sources) => prefix + rename(sources));
+    if (key === 'episodeTitle') return value.replace(/^【([^】]+)】/, (_, sources) => `【${rename(sources)}】`);
+    return value;
+  }), { status: response.status, headers: response.headers });
+}
+
 async function handleRequest(req, env, deployPlatform, clientIp) {
   // 加载全局变量和环境变量配置
   globals = Globals.init(env);
@@ -341,17 +354,17 @@ async function handleRequest(req, env, deployPlatform, clientIp) {
   // GET /api/v2/search/anime
   if (path === "/api/v2/search/anime" && method === "GET") {
     const response = await searchAnime(url);
-    if (!/ForwardWidgets/i.test(req.headers.get('user-agent') || '') || !response.ok) return response;
+    if (!/ForwardWidgets/i.test(req.headers.get('user-agent') || '') || !response.ok) return withSourceDisplayNames(response);
     const data = await response.clone().json();
     const title = extractAnimeTitle(url.searchParams.get('keyword') || '').toLowerCase();
-    if (!title || !Array.isArray(data.animes)) return response;
+    if (!title || !Array.isArray(data.animes)) return withSourceDisplayNames(response);
     const exact = data.animes.filter(anime => extractAnimeTitle(anime.animeTitle || '').toLowerCase() === title);
-    return exact.length ? jsonResponse({ ...data, animes: exact }, response.status) : response;
+    return withSourceDisplayNames(exact.length ? jsonResponse({ ...data, animes: exact }, response.status) : response);
   }
 
   // GET /api/v2/search/episodes
   if (path === "/api/v2/search/episodes" && method === "GET") {
-    return searchEpisodes(url);
+    return withSourceDisplayNames(await searchEpisodes(url));
   }
 
   // GET|POST /api/v2/fongmi/danmaku
@@ -366,7 +379,7 @@ async function handleRequest(req, env, deployPlatform, clientIp) {
 
   // GET /api/v2/match
   if (path === "/api/v2/match" && method === "POST") {
-    return matchAnime(url, req, clientIp);
+    return withSourceDisplayNames(await matchAnime(url, req, clientIp));
   }
   // POST /api/v2/favorite/add - 收藏剧集（永久缓存）
   if ((path === "/api/v2/favorite/add" || path === "/api/favorite/add") && method === "POST") {
@@ -396,7 +409,7 @@ async function handleRequest(req, env, deployPlatform, clientIp) {
 
   // GET /api/v2/bangumi/:animeId
   if (path.startsWith("/api/v2/bangumi/") && method === "GET") {
-    return getBangumi(path);
+    return withSourceDisplayNames(await getBangumi(path));
   }
 
   // GET /api/v2/comment/:commentId or /api/v2/comment?url=xxx or /api/v2/extcomment?url=xxx

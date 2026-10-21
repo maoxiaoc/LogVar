@@ -32,6 +32,7 @@ jobs:
           ln -s "$GITHUB_WORKSPACE/server/node_modules" app/src/main/assets/nodejs-project/node_modules
       - name: 缓存与请求隔离
         run: |
+          node --test tests/dandan-episodes.mjs
           node tests/mobile-resources.mjs
           node tests/layout-insets.mjs
       - name: 网络地址与来源拖拽

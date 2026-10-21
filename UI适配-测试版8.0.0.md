@@ -12,5 +12,3 @@
 构建：`gradle :app:assembleRelease --offline`。
 
 官方适配依据：[Insets 消费](https://developer.android.com/develop/ui/compose/system/insets-ui)、[edge-to-edge](https://developer.android.com/develop/ui/compose/system/setup-e2e)、[挖孔安全区](https://developer.android.com/develop/ui/compose/system/cutouts)。
-
-一加 8T 的此前 8.0.0 自适应布局已获用户认可；一加 13 的实际显示仍待用户验证。

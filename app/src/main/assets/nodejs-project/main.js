@@ -13,9 +13,9 @@ if (!fs.existsSync(envPath)) {
   const admin = crypto.randomBytes(16).toString('hex');
   fs.writeFileSync(envPath, [
     `TOKEN=${token}`, `ADMIN_TOKEN=${admin}`,
-    'SOURCE_ORDER=tencent,iqiyi,bilibili,dandan,imgo,youku,renren',
-    'PLATFORM_ORDER=qq,qiyi,bilibili1,dandan,imgo,youku,renren',
-    'MERGE_SOURCE_PAIRS=tencent&iqiyi&bilibili&dandan&imgo&youku&renren',
+    'SOURCE_ORDER=tencent,iqiyi,bilibili,dandan,imgo,youku,renren,hanjutv',
+    'PLATFORM_ORDER=qq,qiyi,bilibili1,dandan,imgo,youku,renren,hanjutv',
+    'MERGE_SOURCE_PAIRS=tencent&iqiyi&bilibili&dandan&imgo&youku&renren&hanjutv',
     'SEARCH_CACHE_MINUTES=10', 'COMMENT_CACHE_MINUTES=30', 'RATE_LIMIT_MAX_REQUESTS=30'
   ].join('\n'));
 }

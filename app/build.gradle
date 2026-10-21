@@ -16,8 +16,8 @@ android {
         applicationId 'app.logvar'
         minSdk 26
         targetSdk 35
-        versionCode 11
-        versionName '9.0.0-beta'
+        versionCode 12
+        versionName '10.0.0-beta'
         externalNativeBuild { cmake { arguments '-DANDROID_STL=c++_shared' } }
     }
     externalNativeBuild { cmake { path file('CMakeLists.txt') } }

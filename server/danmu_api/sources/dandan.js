@@ -337,11 +337,28 @@ export default class DandanSource extends BaseSource {
       const bangumiData = resp.data.bangumi;
 
       // 提取剧集列表，确保它是数组
-      const episodes = Array.isArray(bangumiData.episodes) ? bangumiData.episodes : [];
+      let episodes = Array.isArray(bangumiData.episodes) ? bangumiData.episodes : [];
 
       // 提取标题别名列表
       // 数据源格式: [{"language":"主标题","title":"雨天遇见狸"}, ...]
       const titles = Array.isArray(bangumiData.titles) ? bangumiData.titles.map(t => t.title) : [];
+
+      // 部分新番的详情分集尚未同步，但逐集搜索已可用；仅补回同一作品 ID。
+      const searchTitle = bangumiData.searchKeyword || bangumiData.animeTitle || titles[0];
+      if (episodes.length === 0 && searchTitle) {
+        try {
+          const searchResp = await httpGet(`https://api.danmaku.weeblify.app/ddp/v1?path=/v2/search/episodes?anime=${encodeURIComponent(searchTitle)}`, {
+            headers: { 'Content-Type': 'application/json', 'User-Agent': DandanUserAgent },
+            retries: 1,
+          });
+          const animes = Array.isArray(searchResp?.data?.animes) ? searchResp.data.animes : [];
+          const matched = animes.find(anime => String(anime.animeId) === String(id));
+          if (Array.isArray(matched?.episodes)) episodes = matched.episodes;
+          log('info', `[dandan] 详情分集为空，逐集搜索补回 ${episodes.length} 集 (animeId: ${id})`);
+        } catch (error) {
+          log('warn', `[dandan] 分集兜底搜索失败: ${error.message}`);
+        }
+      }
 
       // 提取相关作品列表以供系列扩展搜索
       const relateds = Array.isArray(bangumiData.relateds) ? bangumiData.relateds : [];
@@ -369,7 +386,7 @@ export default class DandanSource extends BaseSource {
       const imageUrl = bangumiData.imageUrl || null;
 
       // 正常情况下输出 JSON 字符串
-      log("info", `[dandan] getDandanEposides: ${JSON.stringify(resp.data.bangumi.episodes)}`);
+      log("info", `[dandan] getDandanEposides: ${JSON.stringify(episodes)}`);
 
       // 返回包含剧集、别名、相关作品、类型及封面信息的完整对象
       return { episodes, titles, relateds, type, typeDescription, imageUrl };
