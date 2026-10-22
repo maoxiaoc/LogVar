@@ -46,6 +46,8 @@ for (const module of metadata.modules) assert.equal(typeof h.context[module.func
 assert.deepEqual(JSON.parse(JSON.stringify(h.context.WidgetMetadata)), metadata);
 assert.equal(metadata.id, `logvar.${target}.local`);
 assert.equal(metadata.title, 'LogVar');
+// Rex's native importer rejects metadata without this field (device A/B test).
+assert.match(h.context.WidgetMetadata.requiredVersion ?? '', /^\d+\.\d+\.\d+$/, 'Importer requires requiredVersion');
 assert.deepEqual(metadata.globalParams[0].enumOptions.map(option => option.value), ['mergeAll', 'most']);
 assert.ok(!metadata.globalParams.some(param => /sourceOrder|platformOrder|otherServer|priority/i.test(param.name)));
 assert.equal(h.api.normalizeConfig({ enabledSources: 'youku,bilibili,tencent' }).SOURCE_ORDER,

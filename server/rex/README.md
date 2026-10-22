@@ -2,6 +2,8 @@
 
 导入文件：[logvar-rex-1.0.3.js](../dist/logvar-rex-1.0.3.js)。模块显示名称为 **LogVar**，版本号只出现在文件名和版本字段中。模块 ID 为 `logvar.rex.local`。
 
+1.0.3 修正版（覆盖同版本旧构建）修复本地 JS 导入失败：恢复 `requiredVersion: "0.0.2"`。用户在同一 Rex 中确认 Forward 1.0.3 可导入、Rex 1.0.3 不可导入；仅补回此字段的 Rex 验证包随后导入成功。开发库将字段声明为可选，但实际导入需保留。新增离线检查防止再次遗漏；实机反馈确认的是导入，不等于已验证播放和所有来源。
+
 基于 LogVar Forward 1.0.3 生成，复用同一套来源、匹配、过滤和合并代码。两种播放器使用独立模块 ID 和分集索引缓存，避免相互覆盖。Rex 版不需要先安装 Forward 模块。
 
 ## 导入和功能
@@ -22,7 +24,7 @@
 2026-10-22 核对 `baranwang/rex-widget-libs` 的 `@rexnow/libs` 3.1.3 源码：
 
 - [弹幕接口](https://github.com/baranwang/rex-widget-libs/blob/main/packages/libs/src/env/danmu.ts)：沿用 `animes`、`episodeId/episodeTitle`、`count/comments` 及 `cid/p/m`。
-- [模块元数据](https://github.com/baranwang/rex-widget-libs/blob/main/packages/libs/src/env/metadata.ts)：保留 `searchDanmu/getDetail/getComments` 三个 danmu 入口及五项全局参数。未虚设最低 Rex 客户端版本。
+- [模块元数据](https://github.com/baranwang/rex-widget-libs/blob/main/packages/libs/src/env/metadata.ts)：保留 `searchDanmu/getDetail/getComments` 三个 danmu 入口及五项全局参数。1.0.3 根据用户实机对照恢复 `requiredVersion: "0.0.2"`；此兼容字段不代表逐一验证过所有 Rex 历史版本。
 - [Widget 适配器](https://github.com/baranwang/rex-widget-libs/blob/main/packages/libs/src/widget-adaptor.ts)：HTTP 的 `statusCode` 转换成原核心需要的 `status`，兼容字符串 JSON；TMDB 使用不带开头斜线的相对路径，匹配适配器在路径前添加 `/3/` 的行为。
 
 脚本仍整集获取弹幕，没有增加按进度分片入口。所有来源逻辑来自项目现有核心；Rex 的宿主能力、计时器及实际平台接口可用性需实机验证。开发库模拟接口不是客户端源码，离线验证不能代替 Apple TV 导入和播放检查。
