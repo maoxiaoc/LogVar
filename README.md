@@ -1,8 +1,33 @@
-# Logvar Android App
+# LogVar
 
-在 Android 手机上运行弹幕 API 服务，为兼容播放器提供弹幕接口。
+弹幕获取与多来源合并工具，提供 **Android 弹幕 API 服务**、**Forward 弹幕模块**和 **Rex 弹幕模块**。
 
 当前版本：**测试版 10.0.0（10.0.0-beta）**。服务随应用在手机本地运行，无需 Termux，也无需另行部署服务器。10.0.0 修复《FX战士久留美》等作品因上游详情接口分集为空而无法加载弹幕的问题，真实接口已验证第一集可加载弹幕。变更详见 [更新记录](CHANGELOG.md)，开发交接见 [10.0.0 交接文档](交接文档-测试版10.0.0.md)。
+
+## 适用范围：选择哪一种？
+
+| 形式 | 适用播放器 / 环境 | 是否需要其他设备运行服务 |
+| --- | --- | --- |
+| Android APP（测试版 10.0.0） | 支持填写兼容自定义弹幕 API 地址的播放器；服务运行于 Android 手机，可供本机或同一局域网设备访问 | 需要 Android 手机运行服务 |
+| Forward 模块（1.0.3） | **Forward 播放器**中支持 JavaScript 弹幕模块的版本，面向 Apple TV / tvOS 使用场景 | 不需要 Android APP、电脑或 NAS 常驻 |
+| Rex 模块（1.0.3） | **Rex 播放器**中支持 Widget 弹幕模块的版本，面向 Apple TV / tvOS 使用场景 | 不需要 Android APP、电脑或 NAS 常驻 |
+
+两个模块都是播放器内部执行的 JavaScript，不是独立 tvOS 应用或后台 HTTP 服务器。请在 Forward 导入 Forward 文件，在 Rex 导入 Rex 文件；不适用于只接受弹幕 API 地址而不支持这类脚本的其他播放器。其他客户端平台未逐一验证，不据此宣称全部兼容。
+
+## Forward / Rex 模块下载与导入
+
+| 播放器 | 当前模块文件 | 可直接用于 URL 导入的 JS 原文 | 使用说明 |
+| --- | --- | --- | --- |
+| Forward | [logvar-forward-1.0.3.js](server/dist/logvar-forward-1.0.3.js) | [Forward 导入链接](https://raw.githubusercontent.com/maoxiaoc/LogVar/main/server/dist/logvar-forward-1.0.3.js) | [Forward 说明](server/forward/README.md) |
+| Rex | [logvar-rex-1.0.3.js](server/dist/logvar-rex-1.0.3.js) | [Rex 导入链接](https://raw.githubusercontent.com/maoxiaoc/LogVar/main/server/dist/logvar-rex-1.0.3.js) | [Rex 说明](server/rex/README.md) |
+
+在对应播放器的模块管理中导入文件或 JS 原文链接，然后在弹幕功能中选择 **LogVar** 并搜索作品、选择分集。模块显示名称不带版本号，文件名保留版本号方便区分。GitHub 文件预览页不是可导入的 JS 原文地址。
+
+两个模块共用弹幕核心：媒体资料优先匹配、标题搜索兜底，支持“合并全部来源”和“仅保留弹幕最多的来源”；默认启用 8 个来源，共允许配置 17 个来源。提供屏蔽词、去重间隔、可选 B站 Cookie；搜索无结果时显示“😭 未匹配到资源”。无来源优先级或本地弹幕文件导入功能。
+
+两个版本使用独立模块 ID 和分集缓存，Rex 版适配其 HTTP 状态字段和 TMDB 路径。它们都需要网络访问上游接口，部分来源使用公共中转。
+
+已通过两种宿主接口格式的离线回归检查及部分弹弹真实接口验证；**Forward / Rex 在 Apple TV 上的导入、播放和渲染仍待实机验证**，不保证所有来源持续可用。
 
 ## 项目来源
 
@@ -47,7 +72,7 @@
 弹幕源的实际可用性会受平台接口、网络、地区与访问限制影响；一次检测成功不代表持续可用，零条弹幕也不一定表示接口失效。
 ## 下载与使用
 
-测试版 10.0.0 安装包如下；已发布版本可从 [Releases](https://github.com/maoxiaoc/LogVar-Android-App/releases) 下载。
+测试版 10.0.0 安装包如下；已发布版本可从 [Releases](https://github.com/maoxiaoc/LogVar/releases) 下载。
 
 | 安装包 | 适用设备 |
 | --- | --- |
@@ -69,7 +94,7 @@ API Token 用于播放器访问；管理 Token 用于管理功能，不应填写
 
 ### 反馈与自动检查
 
-遇到问题或有功能建议，请使用 [Issues 模板](https://github.com/maoxiaoc/LogVar-Android-App/issues/new/choose)，并移除 Token、Cookie、完整 API 地址和个人信息。个人项目不承诺响应或修复时间。
+遇到问题或有功能建议，请使用 [Issues 模板](https://github.com/maoxiaoc/LogVar/issues/new/choose)，并移除 Token、Cookie、完整 API 地址和个人信息。个人项目不承诺响应或修复时间。
 
 GitHub Actions 会在 main 更新及 Pull Request 时运行缓存、请求隔离、网络地址和拖拽逻辑的基础测试；这不代替 Android 构建或真机验证。自动检查只使用只读仓库权限，不读取签名密钥，也不发布 APK。Dependabot 安全修复需人工检查、测试后合并，不自动合并。
 
