@@ -9,8 +9,8 @@
 | 形式 | 适用播放器 / 环境 | 是否需要其他设备运行服务 |
 | --- | --- | --- |
 | Android APP（测试版 11.0.0） | 支持填写兼容自定义弹幕 API 地址的播放器；服务运行于 Android 手机，可供本机或同一局域网设备访问 | 需要 Android 手机运行服务 |
-| Forward 模块（1.0.5） | **Forward 播放器**中支持 JavaScript 弹幕模块的版本，面向 Apple TV / tvOS 使用场景 | 不需要 Android APP、电脑或 NAS 常驻 |
-| Rex 模块（1.0.5） | **Rex 播放器**中支持 Widget 弹幕模块的版本，面向 Apple TV / tvOS 使用场景 | 不需要 Android APP、电脑或 NAS 常驻 |
+| Forward 模块（1.0.7） | **Forward 播放器**中支持 JavaScript 弹幕模块的版本，面向 Apple TV / tvOS 使用场景 | 不需要 Android APP、电脑或 NAS 常驻 |
+| Rex 模块（1.0.7） | **Rex 播放器**中支持 Widget 弹幕模块的版本，面向 Apple TV / tvOS 使用场景 | 不需要 Android APP、电脑或 NAS 常驻 |
 
 两个模块都是播放器内部执行的 JavaScript，不是独立 tvOS 应用或后台 HTTP 服务器。请在 Forward 导入 Forward 文件，在 Rex 导入 Rex 文件；不适用于只接受弹幕 API 地址而不支持这类脚本的其他播放器。其他客户端平台未逐一验证，不据此宣称全部兼容。
 
@@ -18,10 +18,14 @@
 
 | 播放器 | 当前模块文件 | 可直接用于 URL 导入的 JS 原文 | 使用说明 |
 | --- | --- | --- | --- |
-| Forward | [logvar-forward-1.0.5.js](server/dist/logvar-forward-1.0.5.js) | [Forward 导入链接](https://raw.githubusercontent.com/maoxiaoc/LogVar/main/server/dist/logvar-forward-1.0.5.js) | [Forward 说明](server/forward/README.md) |
-| Rex | [logvar-rex-1.0.5.js](server/dist/logvar-rex-1.0.5.js) | [Rex 导入链接](https://raw.githubusercontent.com/maoxiaoc/LogVar/main/server/dist/logvar-rex-1.0.5.js) | [Rex 说明](server/rex/README.md) |
+| Forward | [logvar-forward-1.0.7.js](server/dist/logvar-forward-1.0.7.js) | [Forward 导入链接](https://raw.githubusercontent.com/maoxiaoc/LogVar/main/server/dist/logvar-forward-1.0.7.js) | [Forward 说明](server/forward/README.md) |
+| Rex | [logvar-rex-1.0.7.js](server/dist/logvar-rex-1.0.7.js) | [Rex 导入链接](https://raw.githubusercontent.com/maoxiaoc/LogVar/main/server/dist/logvar-rex-1.0.7.js) | [Rex 说明](server/rex/README.md) |
 
 在对应播放器的模块管理中导入文件或 JS 原文链接，然后在弹幕功能中选择 **LogVar** 并搜索作品、选择分集。模块显示名称不带版本号，文件名保留版本号方便区分。GitHub 文件预览页不是可导入的 JS 原文地址。
+
+1.0.7 将完整提示放入参数标题：“启用来源（未设置时使用默认来源）”，使不展示参数说明的界面也能显示提示。实际显示和旧参数信息是否刷新仍需客户端验证。
+
+1.0.6 将启用来源标注为“可选，未设置时使用默认 9 个来源”。未填写、手动清空或仅输入空白均使用默认来源；填写具体来源时替换默认列表，逗号分隔、不分优先级。
 
 1.0.5 进一步同步爱奇艺本地视频 ID 解码修复，避免国际解码接口超时导致空弹幕。
 
@@ -31,7 +35,7 @@
 
 两个版本使用独立模块 ID 和分集缓存，Rex 版适配其 HTTP 状态字段和 TMDB 路径。它们都需要网络访问上游接口，部分来源使用公共中转。
 
-已通过两种宿主接口格式的离线回归检查及部分弹弹真实接口验证。旧构建 Rex 1.0.3 缺少 `requiredVersion` 导致本地导入失败；仅补回该字段的验证包已获用户实机导入成功反馈，1.0.3 修正版已补回此字段，当前 **Rex 1.0.5** 继续保留。该反馈仅确认导入，播放、渲染及各来源可用性仍需实机验证。
+已通过两种宿主接口格式的离线回归检查及部分弹弹真实接口验证。旧构建 Rex 1.0.3 缺少 `requiredVersion` 导致本地导入失败；仅补回该字段的验证包已获用户实机导入成功反馈，1.0.3 修正版已补回此字段，当前 **Rex 1.0.7** 继续保留。该反馈仅确认导入，播放、渲染及各来源可用性仍需实机验证。
 
 ## 项目来源
 

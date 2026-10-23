@@ -54,6 +54,12 @@ assert.deepEqual(metadata.globalParams[0].enumOptions.map(option => option.value
 assert.ok(!metadata.globalParams.some(param => /sourceOrder|platformOrder|otherServer|priority/i.test(param.name)));
 assert.equal(h.api.normalizeConfig({ enabledSources: 'youku,bilibili,tencent' }).SOURCE_ORDER,
   h.api.normalizeConfig({ enabledSources: 'tencent,youku,bilibili' }).SOURCE_ORDER);
+const defaultSources = h.api.normalizeConfig().SOURCE_ORDER;
+assert.equal(defaultSources.split(',').length, 9);
+for (const enabledSources of [undefined, null, '', '  \t\n']) {
+  assert.equal(h.api.normalizeConfig({ enabledSources }).SOURCE_ORDER, defaultSources);
+}
+assert.equal(h.api.normalizeConfig({ enabledSources: ' iqiyi,tencent ' }).SOURCE_ORDER, 'iqiyi,tencent');
 assert.throws(() => h.api.normalizeConfig({ enabledSources: 'unknown' }), /不支持/);
 assert.throws(() => h.api.normalizeConfig({ sourceMode: 'priority' }), /不支持/);
 assert.throws(() => h.api.normalizeConfig({ groupMinute: -1 }), /0～30/);

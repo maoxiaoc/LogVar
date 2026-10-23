@@ -33,7 +33,7 @@ export function displaySourceNames(title) {
 }
 
 export function normalizeConfig(params = {}) {
-  const sources = [...new Set(String(params.enabledSources ?? DEFAULT_SOURCES)
+  const sources = [...new Set((String(params.enabledSources ?? '').trim() || DEFAULT_SOURCES)
     .split(/[,，\s]+/).filter(Boolean).map(key => ALIASES[key] || key))].sort();
   if (!sources.length || sources.some(key => !Envs.MERGE_ALLOWED_SOURCES.includes(key))) {
     throw new Error('启用来源为空或包含不支持的名称，请检查模块配置。');

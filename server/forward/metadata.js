@@ -1,4 +1,4 @@
-const version = '1.0.5';
+const version = '1.0.7';
 
 export default {
   id: 'logvar.forward.local',
@@ -17,9 +17,9 @@ export default {
       ],
     },
     {
-      name: 'enabledSources', title: '启用来源（逗号分隔，不分优先级）', type: 'input',
+      name: 'enabledSources', title: '启用来源（未设置时使用默认来源）', type: 'input',
       value: 'tencent,iqiyi,imgo,bilibili,youku,dandan,renren,hanjutv,aiyifan',
-      description: '腾讯=tencent，爱奇艺=iqiyi，芒果=imgo，B站=bilibili，优酷=youku，弹弹play=dandan，人人=renren，韩剧TV=hanjutv，爱壹帆=aiyifan；还支持 migu,sohu,leshi,xigua,maiduidui,hongguo,bahamut,animeko。',
+      description: '填写时用逗号分隔；填写内容会替换默认列表；腾讯=tencent，爱奇艺=iqiyi，芒果=imgo，B站=bilibili，优酷=youku，弹弹play=dandan，人人=renren，韩剧TV=hanjutv，爱壹帆=aiyifan',
     },
     { name: 'bilibiliCookie', title: 'B站 Cookie（可选）', type: 'input' },
     { name: 'blockedWords', title: '屏蔽词（可选，沿用 LogVar 规则）', type: 'input' },
