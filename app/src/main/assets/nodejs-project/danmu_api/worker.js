@@ -26,7 +26,7 @@ let globals;
 
 // 只在播放器响应中缩短来源显示名，内部匹配、缓存和下载仍使用原来源标识。
 async function withSourceDisplayNames(response) {
-  const names = { tencent: '腾讯', qq: '腾讯', qiyi: 'iqiyi', bilibili: 'B站', bilibili1: 'B站', dandan: '弹弹', renren: '人人', hanjutv: '韩剧TV' };
+  const names = { tencent: '腾讯', qq: '腾讯', qiyi: 'iqiyi', bilibili: 'B站', bilibili1: 'B站', dandan: '弹弹', renren: '人人', hanjutv: '韩剧TV', aiyifan: '爱壹帆' };
   const rename = sources => sources.split(/([&＆])/).map(source => names[source] || source).join('');
   const data = await response.json();
   return new Response(JSON.stringify(data, (key, value) => {
@@ -40,7 +40,7 @@ async function withSourceDisplayNames(response) {
 async function handleRequest(req, env, deployPlatform, clientIp) {
   const checkSource = new URL(req.url).searchParams.get('checkSource');
   if (checkSource && !sourceCheckContext.getStore()) {
-    const platforms = { tencent: 'qq', iqiyi: 'qiyi', bilibili: 'bilibili1', dandan: 'dandan', imgo: 'imgo', youku: 'youku', renren: 'renren', hanjutv: 'hanjutv' };
+    const platforms = { tencent: 'qq', iqiyi: 'qiyi', bilibili: 'bilibili1', dandan: 'dandan', imgo: 'imgo', youku: 'youku', renren: 'renren', hanjutv: 'hanjutv', aiyifan: 'aiyifan' };
     if (!Object.hasOwn(platforms, checkSource)) return jsonResponse({ success: false, errorMessage: '未知检测来源' }, 400);
     return sourceCheckContext.run({ sourceCheck: checkSource, sourceOrderArr: [checkSource], platformOrderArr: [platforms[checkSource]], mergeSourcePairs: [], maxDanmuSource: false },
       () => handleRequest(req, env, deployPlatform, clientIp));

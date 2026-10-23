@@ -430,7 +430,7 @@ function createProxyServer() {
           }
           // 正向代理：http://proxy.com:port 或 socks5://proxy.com:port
           forwardProxy = config.trim();
-          console.log('[Proxy Server] Forward proxy detected:', forwardProxy);
+          console.log('[Proxy Server] Forward proxy configured');
           // 找到第一个有效代理就停止，避免逻辑混乱
           break; 
         }
@@ -443,7 +443,7 @@ function createProxyServer() {
         hostname: originalUrlObj.hostname,
         port: originalUrlObj.port || (originalUrlObj.protocol === 'https:' ? 443 : 80),
         path: originalUrlObj.pathname + originalUrlObj.search,
-        method: 'GET',
+        method: req.method,
         headers: { ...req.headers } // 传递原始请求头
       };
       
@@ -455,7 +455,7 @@ function createProxyServer() {
       // 处理正向代理逻辑
       if (forwardProxy) {
         // 正向代理模式：使用 HttpsProxyAgent
-        console.log('[Proxy Server] Using forward proxy agent:', forwardProxy);
+        console.log('[Proxy Server] Using configured forward proxy agent');
         options.agent = new HttpsProxyAgent(forwardProxy);
       } else {
         // 直连模式
@@ -467,9 +467,8 @@ function createProxyServer() {
         proxyRes.pipe(res, { end: true });
       });
 
-      // 监听外部触发中断
-      // 当外部触发 abort() 时，这里的 req 会触发 'close'掐断 proxyReq
-      req.on('close', () => {
+      // 请求体读完不代表客户端断线；只在响应连接关闭时取消上游。
+      res.on('close', () => {
         if (!res.writableEnded) {
           console.log('[Proxy Server] Client disconnected prematurely. Destroying upstream request.');
           proxyReq.destroy();
@@ -477,8 +476,8 @@ function createProxyServer() {
       });
 
       proxyReq.on('error', (err) => {
-        // 过滤掉因外部主动断开导致的 ECONNRESET / socket hang up 错误
-        if (req.destroyed || req.aborted || err.code === 'ECONNRESET' || err.message === 'socket hang up') {
+        // 客户端已经断开时，不再向响应连接写入错误
+        if (res.destroyed || req.aborted) {
             // 只有当响应还没结束时，才打印一条 Info 级别的日志，证明熔断成功
             if (!res.writableEnded) {
                 console.log('[Proxy Server] Upstream connection closed (expected behavior due to client interrupt).');
@@ -493,7 +492,7 @@ function createProxyServer() {
         }
       });
 
-      proxyReq.end();
+      req.pipe(proxyReq);
     } else {
       res.statusCode = 400;
       res.end('Bad Request: Missing URL parameter');

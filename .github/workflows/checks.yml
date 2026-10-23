@@ -33,6 +33,9 @@ jobs:
       - name: 缓存与请求隔离
         run: |
           node --test tests/dandan-episodes.mjs
+          node --test tests/aiyifan-app.mjs
+          node --test tests/proxy-forwarding.mjs
+          node --test tests/iqiyi-local-decode.mjs
           node tests/mobile-resources.mjs
           node tests/layout-insets.mjs
       - name: 网络地址与来源拖拽

@@ -919,17 +919,26 @@ export default class IqiyiSource extends BaseSource {
       log("info", `[iqiyi] tvid: ${tvid}`);
       originalTvid = tvid; // 保存原始 tvid，用于解码失败回退
 
-      // 获取 tvid 的解码信息
-      const decodeUrl = `${api_decode_base}${tvid}?platformId=3&modeCode=intl&langCode=sg`;
-      let res = await httpGet(decodeUrl, {
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        },
-      });
-      const data = typeof res.data === "string" ? JSON.parse(res.data) : res.data;
-      tvid = data.data.toString();
-      log("info", `[iqiyi] 解码后 tvid: ${tvid}`);
+      // 优先复用本地解码，避免国内网络必须访问国际站 iq.com。
+      const localTvid = /^\d+$/.test(tvid) ? tvid
+        : /^[a-z0-9]+$/i.test(tvid) && Number.isSafeInteger(parseInt(tvid, 36))
+          ? this._videoIdToEntityId(tvid) : null;
+      if (localTvid && Number.isSafeInteger(Number(localTvid)) && Number(localTvid) > 0) {
+        tvid = localTvid;
+        log("info", `[iqiyi] 本地解码 tvid: ${tvid}`);
+      } else {
+        // 获取 tvid 的解码信息
+        const decodeUrl = `${api_decode_base}${tvid}?platformId=3&modeCode=intl&langCode=sg`;
+        let res = await httpGet(decodeUrl, {
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+          },
+        });
+        const data = typeof res.data === "string" ? JSON.parse(res.data) : res.data;
+        tvid = data.data.toString();
+        log("info", `[iqiyi] 解码后 tvid: ${tvid}`);
+      }
     } catch (error) {
       log("error", "[iqiyi] 请求解码信息失败:", error);
       return new SegmentListResponse({

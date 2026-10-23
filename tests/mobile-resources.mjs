@@ -28,7 +28,7 @@ try {
   assert.ok(stats.cache.search > 0);
   const originalOrder = globals.sourceOrderArr;
   setSearchCache('isolation-check', ['normal']);
-  await Promise.all(['tencent', 'iqiyi', 'hanjutv'].map(source => sourceCheckContext.run({sourceCheck: source, sourceOrderArr: [source]}, async () => {
+  await Promise.all(['tencent', 'iqiyi', 'hanjutv', 'aiyifan'].map(source => sourceCheckContext.run({sourceCheck: source, sourceOrderArr: [source]}, async () => {
     assert.equal(getSearchCache('isolation-check'), null);
     setSearchCache('isolation-check', [source]);
     await new Promise(resolve => setTimeout(resolve, 5));
