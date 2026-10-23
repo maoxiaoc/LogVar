@@ -16,7 +16,7 @@ const STATE_KEY = `${metadata.id}.state.v1`;
 const EMPTY_ANIME_ID = '__empty__';
 const DEFAULT_SOURCES = metadata.globalParams.find(p => p.name === 'enabledSources').value;
 const ALIASES = { qq: 'tencent', qiyi: 'iqiyi', bilibili1: 'bilibili', mango: 'imgo' };
-const DISPLAY_NAMES = { tencent: '腾讯', qq: '腾讯', renren: '人人', dandan: '弹弹', bilibili: 'B站', bilibili1: 'B站', qiyi: 'iqiyi' };
+const DISPLAY_NAMES = { tencent: '腾讯', qq: '腾讯', renren: '人人', dandan: '弹弹', bilibili: 'B站', bilibili1: 'B站', qiyi: 'iqiyi', aiyifan: '爱壹帆' };
 let loaded = false;
 let previousConfig = '';
 // ponytail: serialize callbacks because the reused source core holds mutable global config.

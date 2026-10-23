@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import vm from 'node:vm';
+import { brotliCompressSync } from 'node:zlib';
 import { readFile } from 'node:fs/promises';
 const target = process.argv.includes('--rex') ? 'rex' : 'forward';
 const { default: metadata } = await import(`../${target}/metadata.js`);
@@ -10,8 +12,8 @@ const dataComment = (time, text) => ({ p: `${time},1,16777215,[test]`, m: text }
 const stateKey = `${metadata.id}.state.v1`;
 
 function host(store = new Map(), respond = async () => { throw new Error('Unexpected HTTP call'); }, timers = true, tmdb) {
-  const httpResponse = async (url, options) => {
-    const response = await respond(url, options);
+  const httpResponse = async (url, options, body) => {
+    const response = await respond(url, options, body);
     if (target !== 'rex') return response;
     const { status, ...rest } = response;
     return { ...rest, statusCode: status };
@@ -19,7 +21,7 @@ function host(store = new Map(), respond = async () => { throw new Error('Unexpe
   const requests = [];
   const warnings = [];
   const context = vm.createContext({
-    console: { log() {}, info() {}, warn(...args) { warnings.push(args.join(' ')); }, error() {} },
+    console: { log() {}, info() {}, warn(...args) { warnings.push(args.join(' ')); }, error(...args) { warnings.push(args.join(' ')); } },
     ...(timers ? { setTimeout, clearTimeout } : {}),
     Widget: {
       ...(tmdb ? { tmdb: { async get(path) {
@@ -32,7 +34,7 @@ function host(store = new Map(), respond = async () => { throw new Error('Unexpe
       storage: { async get(key) { return store.get(key); }, async set(key, value) { store.set(key, value); } },
       http: {
         async get(url, options) { requests.push({ method: 'GET', url, options }); return httpResponse(url, options); },
-        async post(url, body, options) { requests.push({ method: 'POST', url, body, options }); return httpResponse(url, options); },
+        async post(url, body, options) { requests.push({ method: 'POST', url, body, options }); return httpResponse(url, options, body); },
       },
     },
   });
@@ -57,7 +59,7 @@ assert.throws(() => h.api.normalizeConfig({ sourceMode: 'priority' }), /不支�
 assert.throws(() => h.api.normalizeConfig({ groupMinute: -1 }), /0～30/);
 await h.context.searchDanmu({ title: '' });
 for (const [source, display] of Object.entries({
-  tencent: '腾讯', qq: '腾讯', renren: '人人', dandan: '弹弹',
+  aiyifan: '爱壹帆', tencent: '腾讯', qq: '腾讯', renren: '人人', dandan: '弹弹',
   bilibili: 'B站', bilibili1: 'B站', qiyi: 'iqiyi', iqiyi: 'iqiyi', imgo: 'imgo', youku: 'youku',
 })) {
   assert.equal(h.api.displaySourceNames(`测试作品 from ${source}`), `测试作品 from ${display}`);
@@ -269,11 +271,110 @@ await identityHost.context.searchDanmu({ ...mediaParams, enabledSources: 'bilibi
 await identityHost.context.searchDanmu({ ...mediaParams, enabledSources: 'bilibili', tmdbId: 456 });
 assert.deepEqual(identities, ['/tv/123/external_ids', '/tv/456/external_ids']);
 
+// Replay beta 11 Aiyifan through both real bundles, including cold starts.
+assert.ok(h.api.normalizeConfig().SOURCE_ORDER.split(',').includes('aiyifan'));
+for (const timers of [true, false]) {
+  const aiyifanStore = new Map();
+  let configCalls = 0, expired = false;
+  const aiyifanResponse = async (input, options, body) => {
+    const url = new URL(input);
+    let data;
+    if (url.pathname === '/api/home/config') {
+      configCalls++;
+      data = { list: { pConfig: { publicKey: 'fixture-public', privateKey: ['fixture-private'] } } };
+    } else {
+      if (url.hostname === 'api.tripdata.app') {
+        assert.equal(options.headers['x-pub'], 'fixture-public');
+        assert.equal(options.headers['x-sign'], createHash('md5').update(url.search.slice(1) + options.headers['x-timestamp'] + 'fixture-private').digest('hex'));
+      }
+      if (url.pathname === '/api/List/GetTitleGetData') {
+        assert.equal(JSON.parse(body).SearchCriteria, '偷天父子兵');
+        data = { list: [{ title: '偷天父子兵', mediaKey: 'fixture-media', mediaType: '电影', coverImgUrl: 'https://fixture.invalid/cover.jpg', episodes: [] }] };
+      } else if (url.pathname === '/api/Video/VideoChooseGather') {
+        assert.equal(JSON.parse(body).mediaKey, 'fixture-media');
+        data = { list: [{ episodeKey: 'fixture-episode', uniqueID: 789, episodeId: 123, episodeTitle: '正片', videoType: 1 }] };
+      } else if (url.pathname === '/api/Video/GetBarrages') {
+        assert.equal(url.searchParams.get('videoId'), '789', 'Use uniqueID rather than episodeId');
+        assert.equal(url.searchParams.get('mediaKey'), 'fixture-media');
+        if (expired) { expired = false; return { status: 401, data: { ret: 401, msg: 'expired' } }; }
+        data = { list: [{ second: 12, position: 1, color: '#ffffff', content: '爱壹帆测试弹幕', good: 2 }] };
+      } else if (url.pathname === '/api/Video/VideoDetails') {
+        data = { detailInfo: { uniqueID: 789, episodeId: 123, videoType: 1 } };
+      } else if (url.pathname === '/v3/list/briefsearch') {
+        // An unavailable optional year endpoint must not discard playable results.
+        return { status: 403, data: { ret: 403, msg: 'region blocked' } };
+      } else assert.fail('Unexpected Aiyifan request: ' + input);
+    }
+    return { status: 200, data: JSON.stringify({ ret: 200, data }) };
+  };
+  const params = { title: '偷天父子兵', enabledSources: 'aiyifan', groupMinute: 0 };
+  const searching = host(aiyifanStore, aiyifanResponse, timers);
+  const result = await searching.context.searchDanmu(params);
+  assert.equal(result.animes.length, 1);
+  assert.match(result.animes[0].animeTitle, /from 爱壹帆$/);
+  const stored = JSON.parse(aiyifanStore.get(stateKey));
+  assert.ok(stored.animes.some(item => item.animeTitle.endsWith('from aiyifan')), JSON.stringify(stored) + searching.warnings.join('\n'));
+  assert.ok(stored.episodeIds.some(item => item.url.includes('videoId=789')));
+  const detailing = host(aiyifanStore, aiyifanResponse, timers);
+  const detail = await detailing.context.getDetailById({ ...params, animeId: result.animes[0].animeId });
+  assert.match(detail[0].episodeTitle, /【爱壹帆】/);
+  for (const sourceMode of ['mergeAll', 'most']) {
+    expired = true;
+    const before = configCalls;
+    const commenting = host(aiyifanStore, aiyifanResponse, timers);
+    const comments = await commenting.context.getCommentsById({ ...params, sourceMode, commentId: detail[0].episodeId });
+    assert.equal(comments.count, 1);
+    assert.equal(comments.comments[0].m, '爱壹帆测试弹幕');
+    assert.equal(configCalls, before + 2, 'Cold start config plus refresh after expired signature');
+  }
+  // Old persisted links without videoId recover it through the detail endpoint.
+  for (const episode of stored.episodeIds) episode.url = episode.url.replace(/&videoId=789/, '');
+  aiyifanStore.set(stateKey, JSON.stringify(stored));
+  const legacy = host(aiyifanStore, aiyifanResponse, timers);
+  assert.equal((await legacy.context.getCommentsById({ ...params, commentId: detail[0].episodeId })).count, 1);
+  assert.ok(legacy.requests.some(item => item.url.includes('/api/Video/VideoDetails')));
+}
+
+// International decode outages must not suppress locally decodable IQIYI comments.
+for (const [videoId, needsInternational] of [['w3afcc4qeo', false], ['3343928609435100', false], ['zzzzzzzzzzzzzz', true]]) {
+  let internationalCalls = 0;
+  const tvid = '3343928609435100';
+  const iqiyiStore = new Map([[stateKey, JSON.stringify({
+    animes: [], episodeIds: [{ id: 10002, url: 'https://www.iqiyi.com/v_' + videoId + '.html', title: '【qiyi】 第1集' }], episodeNum: 10002,
+  })]]);
+  const iqiyiResponse = async (input, options) => {
+    const url = new URL(input);
+    if (url.hostname === 'pcw-api.iq.com') {
+      internationalCalls++;
+      if (!needsInternational) throw new Error('International decode unreachable');
+      return { status: 200, data: { data: tvid } };
+    }
+    if (url.hostname === 'www.iqiyi.com') return { status: 200, data: '<title>Fixture</title>' };
+    if (url.hostname === 'pcw-api.iqiyi.com') {
+      assert.equal(url.pathname, '/video/video/baseinfo/' + tvid);
+      return { status: 200, data: { code: 'A00000', data: { durationSec: 30, displayBarrage: true } } };
+    }
+    if (url.hostname === 'cmts.iqiyi.com') {
+      assert.ok(url.pathname.includes('/' + tvid + '_60_1_'));
+      assert.equal(options.base64Data, true);
+      return { status: 200, data: brotliCompressSync(Buffer.from('<root><content>爱奇艺恢复弹幕</content><showTime>1</showTime><color>ffffff</color><likeCount>0</likeCount></root>')).toString('base64') };
+    }
+    assert.fail('Unexpected IQIYI request: ' + input);
+  };
+  for (const sourceMode of ['mergeAll', 'most']) {
+    const iqiyi = host(iqiyiStore, iqiyiResponse, false);
+    const result = await iqiyi.context.getCommentsById({ commentId: 10002, enabledSources: 'iqiyi', sourceMode });
+    assert.equal(result.count, 1, 'IQIYI must return comments when international decode is unavailable: ' + videoId);
+    assert.equal(result.comments[0].m, '爱奇艺恢复弹幕');
+  }
+  assert.equal(internationalCalls, needsInternational ? 2 : 0);
+}
+
 // URL fallback must preserve encoded links and token values containing '='.
 const urlHost = host();
 assert.equal(vm.runInContext("new URL('../comment?p=a%3Db%3D#x', 'https://example.com/a/b').href", urlHost.context), 'https://example.com/comment?p=a%3Db%3D#x');
 assert.equal(vm.runInContext("new URL('https://example.com/?q=a=b=').searchParams.get('q')", urlHost.context), 'a=b=');
-console.log(`${target} offline checks passed: media-first matching, season/movie identities, title fallback, enabled sources, merged results, empty hint, metadata, both modes, valid counts, blocked words, ties, source failure, cold start, config changes and URL fallback.`);
+console.log(`${target} offline checks passed: IQIYI local decode and international fallback, Aiyifan signed lifecycle, expired signature refresh, legacy links, timerless hosts, media-first matching, season/movie identities, title fallback, enabled sources, merged results, empty hint, metadata, both modes, valid counts, blocked words, ties, source failure, cold start, config changes and URL fallback.`);
 
 if (process.argv.includes('--live')) {
   const live = host(new Map(), async (url, options = {}) => {

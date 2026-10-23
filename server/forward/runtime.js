@@ -120,6 +120,7 @@
   }
   // Never turn a real delay/timeout into an immediate callback. Hosts that lack
   // timers reject only affected source paths instead of spinning or aborting all requests.
+  globalThis.__LOGVAR_HAS_TIMERS__ = typeof globalThis.setTimeout === 'function';
   if (typeof globalThis.setTimeout === 'undefined') {
     globalThis.setTimeout = function () { throw new Error('当前播放器脚本环境不支持计时器。'); };
     globalThis.clearTimeout = function () {};

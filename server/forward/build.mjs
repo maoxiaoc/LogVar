@@ -54,6 +54,14 @@ const result = await build({
           return { path: path.join(root, 'node_modules/brotli/dec/dictionary-browser.js') };
         }
       });
+      builder.onLoad({ filter: /[\\/]sources[\\/]aiyifan\.js$/ }, async args => {
+        const text = await readFile(args.path, 'utf8');
+        const signature = 'waitYearMap(promise, timeoutMs) {';
+        // Optional website year enrichment must not break timerless hosts.
+        const contents = text.replace(signature, signature + '\n    if (!globalThis.__LOGVAR_HAS_TIMERS__) { promise.catch(() => {}); return Promise.resolve(null); }');
+        if (contents === text) throw new Error('Aiyifan year adapter no longer matches the core');
+        return { contents, loader: 'js', resolveDir: path.dirname(args.path) };
+      });
       builder.onLoad({ filter: /[\\/]sources[\\/]dandan\.js$/ }, async args => {
         // The optional TMDB task can reject after the original search already
         // returned. Consume that rejection within the Forward-only adapter.
