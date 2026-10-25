@@ -3,12 +3,15 @@ import vm from 'node:vm';
 import { brotliCompressSync } from 'node:zlib';
 import { readFile } from 'node:fs/promises';
 import { verifyIqiyiRetries } from './iqiyi-retry-check.mjs';
+import { verifyTencentDownload, verifyTencentEmptyPrepared } from './tencent-download-check.mjs';
 const target = process.argv.includes('--rex') ? 'rex' : 'forward';
 const { default: currentMetadata } = await import(`../${target}/metadata.js`);
 const metadata = {...currentMetadata,version:process.env.LOGVAR_TEST_VERSION || currentMetadata.version};
 
 const code = await readFile(new URL(`../dist/logvar-${metadata.version}.js`, import.meta.url), 'utf8');
 await verifyIqiyiRetries(code,target);
+await verifyTencentEmptyPrepared(code,target);
+await verifyTencentDownload(code,target);
 const rawComment = (time, text) => ({ p: `${time},1,25,16777215,0,0,user,1`, m: text });
 const dataComment = (time, text) => ({ p: `${time},1,16777215,[test]`, m: text });
 const stateKey = `${metadata.id}.state.v1`;

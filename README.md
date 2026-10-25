@@ -9,19 +9,21 @@
 | 形式 | 适用播放器 / 环境 | 是否需要其他设备运行服务 |
 | --- | --- | --- |
 | Android APP（测试版 11.0.0） | 支持填写兼容自定义弹幕 API 地址的播放器；服务运行于 Android 手机，可供本机或同一局域网设备访问 | 需要 Android 手机运行服务 |
-| 通用模块（1.0.17） | **Forward / Rex 播放器**中支持 JavaScript 弹幕模块的版本，面向 Apple TV / tvOS 使用场景 | 不需要 Android APP、电脑或 NAS 常驻 |
+| 通用模块（1.0.18） | **Forward / Rex 播放器**中支持 JavaScript 弹幕模块的版本，面向 Apple TV / tvOS 使用场景 | 不需要 Android APP、电脑或 NAS 常驻 |
 
 从 1.0.10 起，Forward 和 Rex 导入同一份 JS 文件。模块在播放器内部执行，不是独立 tvOS 应用或后台 HTTP 服务器；不适用于只接受弹幕 API 地址而不支持这类脚本的其他播放器。其他客户端平台未逐一验证，不据此宣称全部兼容。
 
 ## Forward / Rex 模块下载与导入
 
-当前通用版 **1.0.17**。GitHub 此前提供的是分别导入的 Forward / Rex 1.0.7；本次累计变化详见 [1.0.7 → 1.0.17 完整更新对照](server/forward/CHANGELOG.md)。
+当前通用版 **1.0.18**。独立模块 1.0.7 到通用版的累计对照，以及 1.0.18 本轮修复，见[完整更新说明](server/forward/CHANGELOG.md)。
 
 | 播放器 | 当前文件 | JS 原文导入链接 | 使用说明 |
 | --- | --- | --- | --- |
-| Forward / Rex | [logvar-1.0.17.js](server/dist/logvar-1.0.17.js) | [通用模块导入链接](https://raw.githubusercontent.com/maoxiaoc/LogVar/main/server/dist/logvar-1.0.17.js) | [通用说明](server/forward/README.md) · [Rex 说明](server/rex/README.md) |
+| Forward / Rex | [logvar-1.0.18.js](server/dist/logvar-1.0.18.js) | [通用模块导入链接](https://raw.githubusercontent.com/maoxiaoc/LogVar/main/server/dist/logvar-1.0.18.js) | [通用说明](server/forward/README.md) · [Rex 说明](server/rex/README.md) |
 
-主要更新：两个播放器合用一份模块；移除爱壹帆，默认来源从 9 个改为 8 个；修复去重间隔数字输入；增加自动缓存和完整清理；修复同一集切换策略后复用旧结果及来源标签；增加并发来源收集预算、迟到结果隔离和耗时日志；修复爱奇艺在无计时器环境下的重试异常。已移除本地测试中无法填写参数的“检测完整弹幕流程”入口及代码。
+1.0.18 本轮修复：腾讯下载跳过无关网页、空预加载结果不缓存且允许重试、增加腾讯分片进度日志。Rex 实机慢加载仍有反馈，分钟级等待的原因尚未定位。
+
+累计主要更新：两个播放器合用一份模块；移除爱壹帆，默认来源从 9 个改为 8 个；修复去重间隔数字输入；增加自动缓存和完整清理；修复同一集切换策略后复用旧结果及来源标签；增加并发来源收集预算、迟到结果隔离和耗时日志；修复爱奇艺在无计时器环境下的重试异常。已移除本地测试中无法填写参数的“检测完整弹幕流程”入口及代码。
 
 升级时停用旧独立模块，导入通用文件并按需重新填写配置。执行“清理弹幕缓存”后，重新搜索作品并选择分集，让播放器读取新 ID、来源标签和处理策略。清理涵盖搜索结果、预加载弹幕、已下载弹幕及来源标签记录，并校验、更新刷新标记。
 

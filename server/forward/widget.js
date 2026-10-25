@@ -120,7 +120,7 @@ async function prepareCurrentEpisode(animeId, params) {
   }
   const key = preparedKey(episode.url, episode.title, params);
   let prepared = await findPrepared(key);
-  if (!prepared) prepared = await savePrepared(key, {
+  if (!prepared?.comments?.length) prepared = await savePrepared(key, {
     ...await loadComments(episode.url, episode.title, params, true), episodeId: episode.id,
   });
   return prepared;
@@ -133,7 +133,9 @@ async function preparedComments(commentId, params) {
   const id = Number(originalId(commentId, 'episode'));
   if (!packet || packet.episodeId !== id || packet.key !== preparedKey(findUrlById(id), findTitleById(id), params))
     throw new Error('预加载弹幕已过期或处理设置已改变，请重新搜索选集。');
-  return packet.comments;
+  // Older versions could persist an empty prefetch. Let playback retry instead
+  // of treating that transient failure as a completed ten-minute result.
+  return packet.comments?.length ? packet.comments : null;
 }
 
 function workSourceKey(id, params) {

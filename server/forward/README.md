@@ -1,8 +1,10 @@
 # LogVar Forward / Rex 通用弹幕模块
 
-当前版本 **1.0.17**，两个播放器导入同一份 [logvar-1.0.17.js](../dist/logvar-1.0.17.js)。模块显示名称为 LogVar，ID 为 `logvar.danmu`。
+1.0.18 移除腾讯下载前仅用于读取标题的网页请求，修复空预加载结果被保留并持续返回 0 条的问题，并增加腾讯分片进度日志。正式版 1.0.8 已同步相关修复，仍保留旧版等待方式。Rex 实机慢加载仍有反馈，本次不宣称已解决分钟级等待。
 
-[JS 原文导入链接](https://raw.githubusercontent.com/maoxiaoc/LogVar/main/server/dist/logvar-1.0.17.js) · [1.0.7 → 1.0.17 完整更新对照](CHANGELOG.md)
+当前版本 **1.0.18**，两个播放器导入同一份 [logvar-1.0.18.js](../dist/logvar-1.0.18.js)。模块显示名称为 LogVar，ID 为 `logvar.danmu`。
+
+[JS 原文导入链接](https://raw.githubusercontent.com/maoxiaoc/LogVar/main/server/dist/logvar-1.0.18.js) · [1.0.7 → 1.0.17 完整更新对照](CHANGELOG.md)
 
 ## 适用范围与升级
 

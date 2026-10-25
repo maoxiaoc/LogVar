@@ -33,6 +33,7 @@ export async function findPrepared(keyOrToken) {
 }
 
 export async function savePrepared(key, selection) {
+  if (!Array.isArray(selection.comments) || !selection.comments.length) return null;
   if (String(await Widget.storage.get(EPOCH_KEY) || '0') !== epoch) throw new Error('弹幕缓存已清理，请重新搜索选集。');
   await loadPrepared();
   const item = { key, ...clone(selection), epoch, expires: Date.now() + 600000,

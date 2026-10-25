@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import currentMetadata from './metadata.js';
 import { verifyIqiyiRetries } from './iqiyi-retry-check.mjs';
+import { adaptTencentMethod } from './tencent-adapter.mjs';
+import { verifyTencentDownload, verifyTencentEmptyPrepared } from './tencent-download-check.mjs';
 
 const input = new URL('./legacy-core.js.txt', import.meta.url);
 const output = new URL('../dist/logvar-1.0.8.js', import.meta.url);
@@ -21,6 +23,16 @@ const inlineInput = /(name: "groupMinute", title: "[^"]*", type: )"count"/;
 assert.ok(inlineInput.test(code));
 code = code.replace(inlineInput, '$1"input"');
 replaceOnce('Number(params.groupMinute ?? 1)', 'Number(String(params.groupMinute ?? "").trim() || "1")');
+// Replace only Tencent's download method with the shared player adapter.
+// Source collection and waiting in this archived build remain unchanged.
+const tencentCore = await readFile(new URL('../danmu_api/sources/tencent.js',import.meta.url),'utf8');
+const coreStart = tencentCore.indexOf('async getEpisodeDanmu(id)');
+const coreEnd = tencentCore.indexOf('async getEpisodeDanmuSegments(id)',coreStart);
+const tencentAt = code.indexOf('// danmu_api/sources/tencent.js');
+const oldTencentStart = code.indexOf('async getEpisodeDanmu(id)',tencentAt);
+const oldTencentEnd = code.indexOf('async getEpisodeDanmuSegments(id)',oldTencentStart);
+assert.ok(coreStart >= 0 && coreEnd > coreStart && tencentAt >= 0 && oldTencentStart > tencentAt && oldTencentEnd > oldTencentStart);
+code = code.slice(0,oldTencentStart) + adaptTencentMethod(tencentCore.slice(coreStart,coreEnd)) + code.slice(oldTencentEnd);
 // Keep the archived source pipeline, but avoid IQIYI's timer-only retry path
 // on native players without timers. Exactly one alternate official route.
 const iqiyiStart = code.indexOf('// danmu_api/sources/iqiyi.js');
@@ -155,6 +167,8 @@ new vm.Script(code, { filename: 'logvar-1.0.8.js' });
 // Check the same archived file in both host response formats and both modes.
 for (const player of ['forward', 'rex']) {
   await verifyIqiyiRetries(code, player);
+  await verifyTencentEmptyPrepared(code, player);
+  await verifyTencentDownload(code, player);
   const tmdbPaths = [];
   let requests = 0, now = Date.now(), searchFixture = false, largePayload = false;
   const store = new Map([[`${metadata.id}.state.v1`, JSON.stringify({animes:[],episodeNum:10002,

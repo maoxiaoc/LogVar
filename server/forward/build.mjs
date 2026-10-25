@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import vm from 'node:vm';
 import metadata from './metadata.js';
+import { adaptTencentMethod } from './tencent-adapter.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const runtime = await readFile(path.join(root, 'forward/runtime.js'), 'utf8');
@@ -95,6 +96,10 @@ DandanSource.prototype.getEpisodes = async function(id) {
             '$&\nif ($1.some(item => item.status === "rejected")) return [];')
           .replace('if (res.error?.bilibiliCode !== undefined) throw res.error;', 'throw res.error || new Error("弹幕分片未完成");');
         let contents = text.slice(0, start) + method + text.slice(end);
+        if (path.basename(args.path) === 'tencent.js') {
+          method = adaptTencentMethod(method);
+          contents = text.slice(0, start) + method + text.slice(end);
+        }
         // IQIYI's segment helper swallowed transport/decode failures as empty
         // segments. Preserve legitimate 404/empty responses, reject failures.
         if (path.basename(args.path) === 'iqiyi.js') {
