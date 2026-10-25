@@ -3,8 +3,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import vm from 'node:vm';
-const target = process.argv.includes('--rex') ? 'rex' : 'forward';
-const { default: metadata } = await import(`../${target}/metadata.js`);
+import metadata from './metadata.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const runtime = await readFile(path.join(root, 'forward/runtime.js'), 'utf8');
@@ -35,7 +34,6 @@ const result = await build({
   metafile: true,
   define: {
     'globalThis.__FORWARD_WIDGET__': 'true',
-    'globalThis.__WIDGET_TMDB_PREFIX__': JSON.stringify(target === 'rex' ? '' : '/'),
   },
   plugins: [{
     name: 'forward-host',
@@ -66,10 +64,97 @@ const result = await build({
         // The optional TMDB task can reject after the original search already
         // returned. Consume that rejection within the Forward-only adapter.
         const text = await readFile(args.path, 'utf8');
-        const contents = text.replace(/\}\)\(\);(\s*\/\/ 搜索结果预过滤)/,
+        let contents = text.replace(/\}\)\(\);(\s*\/\/ 搜索结果预过滤)/,
           '})().catch(() => ({ success: false, source: "tmdb" }));$1');
         if (contents === text) throw new Error('Dandan fallback adapter no longer matches the core');
+        // Search fallback/season expansion can revisit the same work. Keep
+        // successful details only within this private callback runtime.
+        contents += `
+const widgetDandanDetails = new Map();
+const originalDandanDetails = DandanSource.prototype.getEpisodes;
+DandanSource.prototype.getEpisodes = async function(id) {
+  const key = String(id);
+  if (widgetDandanDetails.has(key)) return widgetDandanDetails.get(key);
+  const result = await originalDandanDetails.call(this, id);
+  if (result?.episodes?.length) {
+    widgetDandanDetails.set(key, result);
+    if (widgetDandanDetails.size > 16) widgetDandanDetails.delete(widgetDandanDetails.keys().next().value);
+  }
+  return result;
+};
+`;
         return { contents, loader: 'js', resolveDir: path.dirname(args.path) };
+      });
+      builder.onLoad({ filter: /[\\/]sources[\\/](?:tencent|mango|iqiyi|youku|bilibili)\.js$/ }, async args => {
+        const text = await readFile(args.path, 'utf8');
+        const start = text.indexOf('async getEpisodeDanmu(id)');
+        const end = text.indexOf('async getEpisodeDanmuSegments(id)', start);
+        if (start < 0 || end < 0) throw new Error('Full-episode adapter no longer matches core: ' + args.path);
+        let method = text.slice(start, end)
+          .replace(/const (results|settled) = await Promise\.allSettled\((promises|batch)\);/g,
+            '$&\nif ($1.some(item => item.status === "rejected")) return [];')
+          .replace('if (res.error?.bilibiliCode !== undefined) throw res.error;', 'throw res.error || new Error("弹幕分片未完成");');
+        let contents = text.slice(0, start) + method + text.slice(end);
+        // IQIYI's segment helper swallowed transport/decode failures as empty
+        // segments. Preserve legitimate 404/empty responses, reject failures.
+        if (path.basename(args.path) === 'iqiyi.js') {
+          const signature = 'async getEpisodeSegmentDanmu(segment)';
+          const at = contents.indexOf(signature);
+          const head = contents.slice(0, at), tail = contents.slice(at);
+          const patched = tail.replace('return []; // 返回空数组而不是抛出错误，保持与getEpisodeDanmu一致的行为', 'throw error;');
+          if (at < 0 || patched === tail) throw new Error('IQIYI segment adapter no longer matches core');
+          contents = head + patched;
+            // Native players may have no timers. Try one alternate official route
+            // instead of entering the core's delayed retry loop in that host.
+            const replaceIqiyi = (before, after) => {
+              if (!contents.includes(before)) throw new Error('IQIYI retry adapter no longer matches core: ' + before);
+              contents = contents.replace(before, after);
+            };
+            replaceIqiyi('const doSearch = async (bypassCache = false) => {', 'const doSearch = async (bypassCache = false, requestUrl = url) => {');
+            replaceIqiyi('const resp = await httpGet(url, {', 'const resp = await httpGet(requestUrl, {');
+            replaceIqiyi('const MAX_RETRIES = 2;', 'const MAX_RETRIES = globalThis.__LOGVAR_HAS_TIMERS__ ? 2 : 0;');
+            replaceIqiyi('let data = await doSearch();', `let data = await doSearch();
+      if (!globalThis.__LOGVAR_HAS_TIMERS__ && (!data || String(data.code) === "-1")) {
+        log("info", "[iqiyi] 搜索主接口异常，无计时器环境改用备用接口一次");
+        data = await doSearch(true, url.replace("https://mesh.if.iqiyi.com/", "https://www.iqiyi.com/prelw/"));
+      }`);
+            contents = contents.replaceAll('data.code === "-1"', 'String(data.code) === "-1"');
+            replaceIqiyi('const MAX_EPISODE_RETRIES = 2;', 'const MAX_EPISODE_RETRIES = globalThis.__LOGVAR_HAS_TIMERS__ ? 2 : 0;');
+            replaceIqiyi('const fetchEpisodeData = async (bypassCache = false) => {', 'const fetchEpisodeData = async (bypassCache = false, requestUrl = url) => {');
+            // Scope to the base-info helper; other source requests keep their URL.
+            const baseAt = contents.indexOf('async _fetchBaseInfoData(entityId)');
+            const baseTail = contents.slice(baseAt);
+            const basePatched = baseTail.replace('const resp = await httpGet(url, {', 'const resp = await httpGet(requestUrl, {');
+            if (basePatched === baseTail) throw new Error('IQIYI base-info URL adapter no longer matches core');
+            contents = contents.slice(0, baseAt) + basePatched;
+            replaceIqiyi('let data = await fetchEpisodeData();', `let data = await fetchEpisodeData();
+    if (!globalThis.__LOGVAR_HAS_TIMERS__ && (!data || data.status_code !== 0 || !data.data || !data.data.template)) {
+      log("info", "[iqiyi] 分集主接口异常，无计时器环境改用备用接口一次");
+      data = await fetchEpisodeData(true, url.replace("https://www.iqiyi.com/prelw/", "https://mesh.if.iqiyi.com/"));
+    }`);
+        }
+        if (contents === text) throw new Error('Segment completeness adapter no longer matches core: ' + args.path);
+        return { contents, loader: 'js', resolveDir: path.dirname(args.path) };
+      });
+      builder.onLoad({ filter: /[\\/]apis[\\/]dandan-api\.js$/ }, async args => {
+        const text = await readFile(args.path, 'utf8');
+        const contents = text
+          .replace('const isolatedDetailStore = new Map();', 'const isolatedDetailStore = markSearchDetails(new Map(), key);')
+          .replace('const sourceSearchMap = {};', 'const sourceSearchMap = {}; const sourceStartedAt = {};')
+          .replace('const args = meta.extraSearchArgs', 'sourceStartedAt[source] = Date.now(); const args = meta.extraSearchArgs')
+          .replace('return { key: source, animes: isolatedAnimes', 'return { key: source, startedAt: sourceStartedAt[source], animes: isolatedAnimes')
+          .replace('await Promise.allSettled(pipelineTasks.map(task => task.promise))', 'await collectSearch(pipelineTasks)');
+        if (contents === text || !contents.includes('await collectSearch(pipelineTasks)')) throw new Error('Search stage adapter no longer matches core');
+        return { contents: `import { collectSearch, markSearchDetails } from ${JSON.stringify(path.join(root, 'forward/stages.js'))};\n` + contents,
+          loader: 'js', resolveDir: path.dirname(args.path) };
+      });
+      builder.onLoad({ filter: /[\\/]cache-util\.js$/ }, async args => {
+        const text = await readFile(args.path, 'utf8');
+        const contents = text.replace('export function addAnime(anime, detailStore = null) {',
+          'export function addAnime(anime, detailStore = null) {\n    if (!canWriteDetails(detailStore)) return false;');
+        if (contents === text) throw new Error('Cache stage adapter no longer matches core');
+        return { contents: `import { canWriteDetails } from ${JSON.stringify(path.join(root, 'forward/stages.js'))};\n` + contents,
+          loader: 'js', resolveDir: path.dirname(args.path) };
       });
       builder.onLoad({ filter: /[\\/]http-util\.js$/ }, async args => {
         const text = await readFile(args.path, 'utf8');
@@ -77,7 +162,7 @@ const result = await build({
           .replace('export async function httpGet(', 'async function unusedNodeHttpGet(')
           .replace('export async function httpPost(', 'async function unusedNodeHttpPost(')
           .replace('export async function httpGetWithStreamCheck(', 'async function unusedNodeStreamGet(');
-        const bridge = `
+        const bridge = `import { widgetRequest } from ${JSON.stringify(path.join(root, 'forward/stages.js'))};
 function normalizeHostResponse(response) {
   if (response && response.status === undefined && response.statusCode !== undefined) {
     response = { ...response, status: response.statusCode };
@@ -88,10 +173,10 @@ function normalizeHostResponse(response) {
   return response;
 }
 export async function httpGet(url, options = {}) {
-  return normalizeHostResponse(await Widget.http.get(url, { timeout: 15000, ...options }));
+  return normalizeHostResponse(await widgetRequest(opts => Widget.http.get(url, opts), options, JSON.stringify(['GET', url, options])));
 }
 export async function httpPost(url, body, options = {}) {
-  return normalizeHostResponse(await Widget.http.post(url, body, { timeout: 15000, ...options }));
+  return normalizeHostResponse(await widgetRequest(opts => Widget.http.post(url, body, opts), options));
 }
 export async function httpGetWithStreamCheck(url, options = {}, check) {
   const response = await httpGet(url, options);
@@ -109,9 +194,48 @@ export async function httpGetWithStreamCheck(url, options = {}, check) {
 const externals = Object.values(result.metafile.outputs).flatMap(output => output.imports);
 if (externals.length) throw new Error(`Bundle has runtime imports: ${JSON.stringify(externals)}`);
 const banner = `var WidgetMetadata = ${JSON.stringify(metadata, null, 2)};\n// SPDX-License-Identifier: AGPL-3.0-only\n// Core based on huangxd-/danmu_api; adapted by maoxiaoc.\n`;
-const footer = '\nfunction searchDanmu(params) { return LogvarForward.searchDanmu(params); }\nfunction getDetailById(params) { return LogvarForward.getDetailById(params); }\nfunction getCommentsById(params) { return LogvarForward.getCommentsById(params); }\n';
-const output = banner + runtime + '\n' + result.outputFiles[0].text + footer;
-const filename = `logvar-${target}-${metadata.version}.js`;
+// Each callback gets a private core. Detached host HTTP responses can only
+// touch that old core, never a new search's mutable globals or source instances.
+const footer = `
+var currentLogvar = createLogvarRuntime();
+var LogvarForward = {};
+for (const key of Object.keys(currentLogvar)) {
+  LogvarForward[key] = (...args) => currentLogvar[key](...args);
+}
+var logvarPending = Promise.resolve();
+var logvarInflight = new Map();
+function logvarCallback(name, params) {
+  const key = JSON.stringify([name, Object.entries(params || {}).sort(([a], [b]) => a.localeCompare(b))]);
+  if (logvarInflight.has(key)) return logvarInflight.get(key);
+  const queuedAt = Date.now();
+  const task = logvarPending.then(async () => {
+    const startedAt = Date.now();
+    console.log('[LogVar耗时] ' + JSON.stringify({ phase: 'callback-start', callback: name, queueMs: startedAt - queuedAt }));
+    currentLogvar = createLogvarRuntime();
+    try {
+      const value = await currentLogvar[name](params);
+      console.log('[LogVar耗时] ' + JSON.stringify({ phase: 'callback-return', callback: name,
+        elapsedMs: Date.now() - startedAt, shape: value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value,
+        count: value?.count ?? value?.animes?.length ?? (Array.isArray(value) ? value.length : null) }));
+      return value;
+    } catch (error) {
+      console.log('[LogVar耗时] ' + JSON.stringify({ phase: 'callback-error', callback: name, elapsedMs: Date.now() - startedAt }));
+      throw error;
+    }
+  });
+  logvarInflight.set(key, task);
+  const remove = () => logvarInflight.delete(key);
+  task.then(remove, remove);
+  logvarPending = task.catch(() => {});
+  return task;
+}
+function searchDanmu(params) { return logvarCallback('searchDanmu', params); }
+function getDetailById(params) { return logvarCallback('getDetailById', params); }
+function getCommentsById(params) { return logvarCallback('getCommentsById', params); }
+function clearDanmuCache(params) { return logvarCallback('clearDanmuCache', params); }
+`;
+const output = (banner + runtime + '\nfunction createLogvarRuntime() {\n' + result.outputFiles[0].text + '\nreturn LogvarForward;\n}\n' + footer).replace(/[ \t]+$/gm, '');
+const filename = `logvar-${metadata.version}.js`;
 new vm.Script(output, { filename });
 await mkdir(path.join(root, 'dist'), { recursive: true });
 await writeFile(path.join(root, 'dist', filename), output);

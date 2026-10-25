@@ -5,6 +5,7 @@ import { getImdbepisodes } from '../danmu_api/utils/imdb-util.js';
 import { getSourceMetaByKey } from '../danmu_api/sources/registry.js';
 import { applyMergeLogic } from '../danmu_api/utils/merge-util.js';
 import { storeAnimeIdsToMap } from '../danmu_api/utils/cache-util.js';
+import { collectSearch, markSearchDetails, widgetRequest } from './stages.js';
 
 function dataOf(response) {
   if (response?.status !== undefined && (response.status < 200 || response.status >= 300)) return null;
@@ -53,10 +54,20 @@ export async function searchMedia(params) {
   const season = type === 'tv' ? Number(params.season ?? 1) : null;
   if (type === 'tv' && (!Number.isSafeInteger(season) || season < 1)) return null;
   try {
-    const prefix = globalThis.__WIDGET_TMDB_PREFIX__ ?? '/';
-    const external = dataOf(await Widget.tmdb.get(`${prefix}${type}/${tmdbId}/external_ids`));
+    // Rex's adaptor requires a relative path; some Forward hosts expect '/'.
+    // Try both within the same stage budget, without needing a player setting.
+    let external;
+    for (const prefix of ['', '/']) {
+      try {
+        external = dataOf(await widgetRequest(() => Widget.tmdb.get(`${prefix}${type}/${tmdbId}/external_ids`)));
+        if (/^tt\d+$/.test(external?.imdb_id || '')) break;
+      } catch (_) { /* Try the other host's path convention. */ }
+    }
     let imdbId = external?.imdb_id;
-    if (!/^tt\d+$/.test(imdbId || '')) return null;
+    if (!/^tt\d+$/.test(imdbId || '')) {
+      console.warn('[LogVar] 媒体资料身份不可用，回退标题搜索。');
+      return null;
+    }
     if (type === 'tv' && season > 1) {
       // IMDb identifies the series as a whole. Resolve the requested season's
       // first episode before asking Douban, as in the existing core TMDB source.
@@ -74,34 +85,36 @@ export async function searchMedia(params) {
     const vendors = [...new Map(detail.vendors.map(v => mediaVendor(v, type)).filter(v => v && enabled.includes(v.source))
       .map(v => [`${v.source}:${v.id}`, v])).values()];
     if (!vendors.length) return null;
-    const details = new Map();
-    const animes = [];
-    const matched = new Set();
-    await Promise.all(vendors.map(async vendor => {
-      try {
-        const meta = getSourceMetaByKey(vendor.source);
-        const results = [];
-        const seed = { provider: vendor.source, mediaId: vendor.id, title: detail.title,
-          year: detail.year, type: type === 'movie' ? '电影' : '电视剧', imageUrl: detail.cover_url || info.image || '' };
-        await meta.handleAdapter(meta.instance, [seed], detail.title, results, details, null);
-        if (results.length) {
-          matched.add(vendor.source);
-          animes.push(...results);
-        }
-      } catch (_) { /* Failed platform details fall back to title search below. */ }
-    }));
-    if (!animes.length) return null;
-    // Preserve coverage from Dandan/Renren and any platform without a usable
-    // metadata link. Confirmed platforms do not repeat their keyword search.
-    await Promise.all(enabled.filter(source => !matched.has(source)).map(async source => {
-      try {
+    const tasks = enabled.map(source => {
+      const startedAt = Date.now();
+      const animes = [];
+      const detailStore = markSearchDetails(new Map(), source);
+      const promise = (async () => {
         const meta = getSourceMetaByKey(source);
-        const results = [];
-        const found = await meta.instance.search(detail.title);
-        await meta.handleAdapter(meta.instance, found, detail.title, results, details, season);
-        animes.push(...results);
-      } catch (_) { console.warn(`[LogVar] ${source} 标题补充失败，保留媒体资料匹配结果。`); }
-    }));
+        if (!meta) return;
+        for (const vendor of vendors.filter(v => v.source === source)) {
+          try {
+            const seed = { provider: source, mediaId: vendor.id, title: detail.title,
+              year: detail.year, type: type === 'movie' ? '电影' : '电视剧', imageUrl: detail.cover_url || info.image || '' };
+            await meta.handleAdapter(meta.instance, [seed], detail.title, animes, detailStore, null);
+          } catch (_) { /* Platform identity failure falls back to this source's title search. */ }
+        }
+        if (!animes.length) {
+          const found = await meta.instance.search(detail.title);
+          await meta.handleAdapter(meta.instance, found, detail.title, animes, detailStore, season);
+        }
+      })();
+      return { key: source, startedAt, animes, detailStore, promise };
+    });
+    const settled = await collectSearch(tasks);
+    const animes = [];
+    const details = new Map();
+    tasks.forEach((task, i) => {
+      if (settled[i].status !== 'fulfilled') return;
+      animes.push(...task.animes);
+      for (const [key, value] of task.detailStore) details.set(key, value);
+    });
+    if (!animes.length) return null;
     await applyMergeLogic(animes, details);
     storeAnimeIdsToMap(animes, detail.title);
     return animes.map(({ links, ...anime }) => anime);

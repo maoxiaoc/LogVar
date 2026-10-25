@@ -1,5 +1,2 @@
-import forward from '../forward/metadata.js';
-
-// Keep requiredVersion: removing it caused Rex's native import to fail.
-// Restoring the Forward-compatible value passed the user's device A/B test.
-export default { ...forward, id: 'logvar.rex.local' };
+// Legacy import path: both players now use the same metadata and JS artifact.
+export { default } from '../forward/metadata.js';

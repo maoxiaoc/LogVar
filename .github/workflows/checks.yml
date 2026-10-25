@@ -46,3 +46,7 @@ jobs:
           java -cp "$RUNNER_TEMP/logvar-checks" SourceDragCheck
           javac -d "$RUNNER_TEMP/logvar-checks" app/src/main/java/app/logvar/LayoutPolicy.java tests/LayoutPolicyCheck.java
           java -cp "$RUNNER_TEMP/logvar-checks" LayoutPolicyCheck
+      - name: Forward 与 Rex 通用模块构建和回归
+        run: |
+          npm run build-widget --prefix server
+          npm run test-widget --prefix server
