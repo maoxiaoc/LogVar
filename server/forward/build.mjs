@@ -148,7 +148,7 @@ DandanSource.prototype.getEpisodes = async function(id) {
           .replace('const sourceSearchMap = {};', 'const sourceSearchMap = {}; const sourceStartedAt = {};')
           .replace('const args = meta.extraSearchArgs', 'sourceStartedAt[source] = Date.now(); const args = meta.extraSearchArgs')
           .replace('return { key: source, animes: isolatedAnimes', 'return { key: source, startedAt: sourceStartedAt[source], animes: isolatedAnimes')
-          .replace('await Promise.allSettled(pipelineTasks.map(task => task.promise))', 'await collectSearch(pipelineTasks)');
+          .replace('await collectSearchTasks(pipelineTasks, searchScope)', "await collectSearch(pipelineTasks).then(results => { searchScope.closed = true; return { results, partial: results.some(item => item.status === 'rejected') }; })");
         if (contents === text || !contents.includes('await collectSearch(pipelineTasks)')) throw new Error('Search stage adapter no longer matches core');
         return { contents: `import { collectSearch, markSearchDetails } from ${JSON.stringify(path.join(root, 'forward/stages.js'))};\n` + contents,
           loader: 'js', resolveDir: path.dirname(args.path) };
