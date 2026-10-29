@@ -228,6 +228,7 @@ export default class AiyifanSource extends BaseSource {
    * @returns {Promise<Array>} 搜索结果
    */
   async search(keyword) {
+    if (globalThis.process?.env?.LOGVAR_ANDROID === '1') return [];
     log("info", `[aiyifan] 开始搜索: ${keyword}`);
 
     // App 接口不返回真实年份（postTime 是加入时间），这里与 App 搜索并发请求
@@ -408,6 +409,7 @@ export default class AiyifanSource extends BaseSource {
    * @returns {Promise<Array>} 弹幕列表
    */
   async getEpisodeDanmu(id) {
+    if (globalThis.process?.env?.LOGVAR_ANDROID === '1') return [];
     log("info", `[aiyifan] 获取弹幕: ${id}`);
 
     const episodeLink = this.parseEpisodeLink(id);

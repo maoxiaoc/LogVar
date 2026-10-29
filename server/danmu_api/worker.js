@@ -1,5 +1,6 @@
 import { Globals } from './configs/globals.js';
 import { jsonResponse } from './utils/http-util.js';
+import { annotateMatchSources } from './utils/match-source-labels.js';
 import { extractAnimeTitle } from './utils/common-util.js';
 import { log, formatLogMessage } from './utils/log-util.js'
 import { getFavoriteCachesFromRedis, getRedisCaches, judgeRedisValid } from "./utils/redis-util.js";
@@ -379,7 +380,12 @@ async function handleRequest(req, env, deployPlatform, clientIp) {
 
   // GET /api/v2/match
   if (path === "/api/v2/match" && method === "POST") {
-    return withSourceDisplayNames(await matchAnime(url, req, clientIp));
+    const matched = await matchAnime(url, req, clientIp);
+    const annotated = await annotateMatchSources(matched, async episodeId => {
+      const response = await getComment('/api/v2/comment/' + episodeId, 'json', false, clientIp, false, false);
+      return response.ok ? (await response.json()).comments : [];
+    });
+    return withSourceDisplayNames(annotated);
   }
   // POST /api/v2/favorite/add - 收藏剧集（永久缓存）
   if ((path === "/api/v2/favorite/add" || path === "/api/favorite/add") && method === "POST") {

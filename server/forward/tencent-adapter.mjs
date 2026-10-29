@@ -3,8 +3,8 @@ export function adaptTencentMethod(input) {
   let method = input;
   const pageAt = method.indexOf('// 获取页面标题');
   const segmentsAt = method.indexOf('// 获取弹幕分段数据', pageAt);
-  if (pageAt < 0 || segmentsAt < 0) throw new Error('Tencent HTML adapter no longer matches core');
-  method = method.slice(0, pageAt) + method.slice(segmentsAt);
+  if (pageAt >= 0 && segmentsAt < 0) throw new Error('Tencent HTML adapter no longer matches core');
+  if (pageAt >= 0) method = method.slice(0, pageAt) + method.slice(segmentsAt);
   const replace = (before, after) => {
     if (!method.includes(before)) throw new Error('Tencent timing adapter no longer matches core: ' + before);
     method = method.replace(before, after);

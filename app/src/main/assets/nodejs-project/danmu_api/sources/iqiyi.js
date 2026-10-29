@@ -73,7 +73,7 @@ export default class IqiyiSource extends BaseSource {
       // 搜索接口风控时延迟重试，最多重试两次
       const MAX_RETRIES = 2;
       let data = await doSearch();
-      for (let attempt = 0; attempt < MAX_RETRIES && (!data || data.code === "-1"); attempt++) {
+      for (let attempt = 0; attempt < MAX_RETRIES && (!data || String(data.code) === "-1"); attempt++) {
         const reason = !data ? "搜索响应为空" : `搜索接口风控 (code=${data.code})`;
         log("info", `[iqiyi] ${reason}，等待 3 秒后重试 (${attempt + 1}/${MAX_RETRIES})`);
         await new Promise(r => setTimeout(r, 3000));
@@ -85,7 +85,7 @@ export default class IqiyiSource extends BaseSource {
         return [];
       }
 
-      if (data.code === "-1") {
+      if (String(data.code) === "-1") {
         log("info", "[iqiyi] 搜索接口风控 (code=-1)，重试后仍失败");
         log("info", `[iqiyi] 搜索原始数据: ${JSON.stringify(data)}`);
         return [];

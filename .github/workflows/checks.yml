@@ -36,6 +36,11 @@ jobs:
           node --test tests/aiyifan-app.mjs
           node --test tests/proxy-forwarding.mjs
           node --test tests/iqiyi-local-decode.mjs
+          node --test tests/android-disabled-source.mjs
+          node --test tests/search-deadline.mjs
+          node --test tests/tencent-no-page.mjs
+          node --test tests/comment-deadline.mjs tests/comment-deadline-integration.mjs tests/single-comment-deadline.mjs tests/comment-visible-deadline.mjs
+          node --test tests/match-source-labels.mjs
           node tests/mobile-resources.mjs
           node tests/layout-insets.mjs
       - name: 网络地址与来源拖拽

@@ -1,3 +1,5 @@
+import { collectCommentGroups, fetchSingleComments } from '../utils/comment-deadline.js';
+import { collectSearchTasks } from '../utils/search-deadline.js';
 import { globals } from '../configs/globals.js';
 import { getPageTitle, jsonResponse, httpGet, sourceLogContext, runWithHttpCache, httpCacheContext } from '../utils/http-util.js';
 import { log } from '../utils/log-util.js'
@@ -59,6 +61,7 @@ const tmdbSource = getSourceByKey('tmdb');
 
 // 用于聚合请求的去重Map
 const PENDING_DANMAKU_REQUESTS = new Map();
+const PARTIAL_COMMENT_LISTS = new WeakSet();
 
 function resolveCommentCacheKey(url) {
   const value = String(url || "");
@@ -379,6 +382,7 @@ async function executeSourceHandlers(resultData, queryTitle, targetAnimesList, r
   for (const key of activeSourceKeys) {
     const isolatedAnimes = [];
     const isolatedDetailStore = new Map();
+    isolatedDetailStore.__searchScope = requestAnimeDetailsMap.__searchScope;
     const meta = getSourceMetaByKey(key);
     if (!meta) {
       log("warn", `[system] [searchAnime] 未注册的源键 "${key}"，已跳过 handleAnimes`);
@@ -713,10 +717,13 @@ async function searchAnimeBody(url, preferAnimeId = null, preferSource = null, d
 
     // 构建逐源管道：每个源 search 完成后，通过 executeSourceHandlers 处理 handleAnimes
     // 传入仅含当前源数据的 resultData，使 executeSourceHandlers 仅处理该源
+    const searchScope = { closed: false, startedAt: Date.now() };
     const pipelineTasks = globals.sourceOrderArr.map(source => {
       const isolatedAnimes = [];
       const isolatedDetailStore = new Map();
+      isolatedDetailStore.__searchScope = searchScope;
       const pipelinePromise = sourceSearchMap[source].then(async searchResult => {
+        if (searchScope.closed) return;
         resultData[source] = searchResult;
         await executeSourceHandlers({ [source]: searchResult }, queryTitle, isolatedAnimes, isolatedDetailStore, querySeason, preferAnimeId, preferSource);
       });
@@ -724,7 +731,12 @@ async function searchAnimeBody(url, preferAnimeId = null, preferSource = null, d
     });
 
     // 并发执行所有逐源管道，每个管道内部 search 完成后立即衔接 handleAnimes
-    const pipelineResults = await Promise.allSettled(pipelineTasks.map(task => task.promise));
+    const { results: pipelineResults, partial: searchPartial } = await collectSearchTasks(pipelineTasks, searchScope);
+
+    // 超时管道可能已提供原始搜索数据但尚未完成解析，避免后续跨季扩展再次等待它。
+    for (let i = 0; i < pipelineTasks.length; i++) {
+      if (pipelineResults[i].status !== 'fulfilled') delete resultData[pipelineTasks[i].key];
+    }
 
     // 按SOURCE_ORDER顺序合并各管道的独立结果到目标容器
     // 先处理的源数据优先保留（animeId去重、detailStore键去重）
@@ -755,7 +767,7 @@ async function searchAnimeBody(url, preferAnimeId = null, preferSource = null, d
     }
 
     // 缓存首季/默认请求结果，剥离附加链接
-    if (curAnimes.length > 0) {
+    if (curAnimes.length > 0 && !searchPartial) {
       setSearchCache(cacheKey, curAnimes.map(({ links, ...pureAnime }) => pureAnime), requestAnimeDetailsMap);
     }
 
@@ -2400,6 +2412,8 @@ async function fetchMergedComments(url, animeTitle, commentId) {
     if (!sourceGroups.has(src)) sourceGroups.set(src, []);
     sourceGroups.get(src).push({ factory, index: i });
   });
+  let results, commentPartial = false;
+  if (globalThis.__FORWARD_WIDGET__ === true) {
   const { mapLimited } = await import('../utils/mobile-resources.js');
   const indexedResults = await mapLimited(
     Array.from(sourceGroups.values()), globalThis.process?.env?.LOGVAR_ANDROID === '1' ? 2 : Math.max(1, sourceGroups.size), async (group) => {
@@ -2411,8 +2425,16 @@ async function fetchMergedComments(url, animeTitle, commentId) {
       return items;
     }
   );
-  const results = indexedResults.flat().sort((a, b) => a.index - b.index).map(x => x.data);
+  results = indexedResults.flat().sort((a, b) => a.index - b.index).map(x => x.data);
   
+  } else {
+    const groups = Array.from(sourceGroups.values());
+    const limit = globalThis.process?.env?.LOGVAR_ANDROID === '1' ? 2 : Math.max(1, groups.length);
+    const collected = await collectCommentGroups(groups, partMetas.length, limit);
+    results = collected.values;
+    commentPartial = collected.partial;
+  }
+
   // 调用以dandan为基准的跨源时间轴对齐函数（仅当存在 dandan 源时执行）
   alignSourceTimelines(results, sourceNames, realIds);
 
@@ -2451,7 +2473,12 @@ async function fetchMergedComments(url, animeTitle, commentId) {
   // 3. 合并数据
   let mergedList = [];
   if (globals.maxDanmuSource) {
-    const largestIndex = results.reduce((best, list, index) => list.length > (results[best]?.length || 0) ? index : best, 0);
+    const validCounts = results.map((list, i) => convertToDanmakuJson(list, sourceNames[i] || '').filter(item => {
+      const stamp = String(item.p || '').split(',')[0].trim();
+      return typeof item.m === 'string' && item.m.trim() && stamp && Number.isFinite(Number(stamp)) && Number(stamp) >= 0;
+    }).length);
+    const largestIndex = validCounts.reduce((best, count, index) =>
+      count > validCounts[best] || (count === validCounts[best] && (sourceNames[index] || '').localeCompare(sourceNames[best] || '') < 0) ? index : best, 0);
     mergedList = results[largestIndex] || [];
     log("info", `[merge] 仅保留弹幕最多来源 ${sourceNames[largestIndex] || 'unknown'}: ${mergedList.length} 条`);
   } else {
@@ -2462,7 +2489,9 @@ async function fetchMergedComments(url, animeTitle, commentId) {
   log("info", `[merge] 聚合原始数据完成: 总计 ${mergedList.length} 条 (${statDetails})`);
 
   // 4. 统一处理（去重、过滤、转JSON）
-  return convertToDanmakuJson(mergedList, sourceTag);
+  const converted = convertToDanmakuJson(mergedList, sourceTag);
+  if (commentPartial) PARTIAL_COMMENT_LISTS.add(converted);
+  return converted;
 }
 
 // Extracted function for GET /api/v2/comment/:commentId
@@ -2509,6 +2538,8 @@ export async function getComment(path, queryFormat, segmentFlag, clientIp, inclu
   if (url && url.includes(MERGE_DELIMITER)) {
     danmus = await fetchMergedComments(url, animeTitle, commentId);
   } else {
+    danmus = await fetchSingleComments(async scope => {
+      let danmus = [];
     const commentUrl = cleanUrl;
     const isHongguoUrl = isHongguoPlayerUrl(commentUrl);
 
@@ -2562,9 +2593,11 @@ export async function getComment(path, queryFormat, segmentFlag, clientIp, inclu
     }
 
     // 如果弹幕为空，则请求第三方弹幕服务器作为兜底
-    if ((!danmus || danmus.length === 0) && urlPattern.test(url)) {
+    if (!scope.expired && (!danmus || danmus.length === 0) && urlPattern.test(url)) {
       danmus = await sourceLogContext.run('other', () => otherSource.getComments(url, "other_server", segmentFlag));
     }
+      return danmus;
+    }, { segment: segmentFlag });
   }
 
   // 单链接偏移值应用（合并链接已在 fetchMergedComments 中按来源分别应用，此处仅处理单链接）
@@ -2666,7 +2699,7 @@ export async function getComment(path, queryFormat, segmentFlag, clientIp, inclu
   if (!segmentFlag) {
     if (danmus && danmus.comments) danmus = danmus.comments;
     if (!Array.isArray(danmus)) danmus = [];
-    if (danmus.length > 0) {
+    if (danmus.length > 0 && !PARTIAL_COMMENT_LISTS.has(danmus)) {
         setCommentCache(cacheKey, danmus);
     }
   }
@@ -2732,6 +2765,8 @@ export async function getCommentByUrl(videoUrl, queryFormat, segmentFlag, includ
       log("info", `[system] [LogVar-API] 检测到链接${singleUrlOffsetPercent ? '百分比' : ''}偏移: ${singleUrlOffset}s`);
     }
 
+    danmus = await fetchSingleComments(async () => {
+      let danmus = [];
     // 根据URL域名判断平台并获取弹幕
     if (url.includes('.qq.com')) {
       danmus = await sourceLogContext.run('tencent', () => tencentSource.getComments(cleanUrl, "qq", segmentFlag));
@@ -2770,6 +2805,9 @@ export async function getCommentByUrl(videoUrl, queryFormat, segmentFlag, includ
       }
     }
 
+      return danmus;
+    }, { segment: segmentFlag });
+
     log("info", `[system] [LogVar-API] Successfully fetched ${danmus.length} comments from URL`);
 
     // 单链接偏移值应用
@@ -2785,7 +2823,7 @@ export async function getCommentByUrl(videoUrl, queryFormat, segmentFlag, includ
     }
 
     // 缓存弹幕结果
-    if (danmus.length > 0) {
+    if (danmus.length > 0 && !PARTIAL_COMMENT_LISTS.has(danmus)) {
       setCommentCache(cacheKey, danmus);
     }
 
@@ -2887,7 +2925,7 @@ export async function getSegmentComment(segment, queryFormat) {
     log("info", `[system] [segmentcomment] Successfully fetched ${danmus.length} segment comments from URL`);
 
     // 缓存弹幕结果
-    if (danmus.length > 0) {
+    if (danmus.length > 0 && !PARTIAL_COMMENT_LISTS.has(danmus)) {
       setCommentCache(cacheKey, danmus);
     }
 

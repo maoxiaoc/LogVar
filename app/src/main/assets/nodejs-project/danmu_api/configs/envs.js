@@ -220,15 +220,16 @@ export class Envs {
    */
   static resolveSourceOrder() {
     let sourceOrder = this.get('SOURCE_ORDER', 'douban,360,renren,hanjutv', 'string');
+    if (globalThis.process?.env?.LOGVAR_ANDROID === '1' && (this.env?.SOURCE_ORDER === '' || (this.env?.SOURCE_ORDER === undefined && globalThis.process?.env?.SOURCE_ORDER === ''))) sourceOrder = '';
 
     const orderArr = sourceOrder
       .split(',')
       .map(s => s.trim())
-      .filter(s => this.ALLOWED_SOURCES.includes(s));
+      .filter(s => this.ALLOWED_SOURCES.includes(s) && !(globalThis.process?.env?.LOGVAR_ANDROID === '1' && s === 'aiyifan'));
 
     this.accessedEnvVars.set('SOURCE_ORDER', orderArr);
 
-    return orderArr.length > 0 ? orderArr : ['douban', '360', 'renren', 'hanjutv'];
+    return orderArr.length > 0 || globalThis.process?.env?.LOGVAR_ANDROID === '1' ? orderArr : ['douban', '360', 'renren', 'hanjutv'];
   }
 
   /**
@@ -241,7 +242,7 @@ export class Envs {
     
     const orderArr = rawOrder
       .split(',')
-      .map(s => s.trim())
+      .map(s => globalThis.process?.env?.LOGVAR_ANDROID === '1' ? s.split('&').map(p => p.trim()).filter(p => p !== 'aiyifan').join('&') : s.trim())
       .filter(item => {
         if (!item) return false;
         // 如果包含 &，则分割校验每一部分是否有效
@@ -278,7 +279,7 @@ export class Envs {
         if (!group) return null;
         
         // 按 & 分割，第一个是主源，剩余的是副源列表
-        const parts = group.split('&').map(s => s.trim()).filter(s => s);
+        const parts = group.split('&').map(s => s.trim()).filter(s => s && !(globalThis.process?.env?.LOGVAR_ANDROID === '1' && s === 'aiyifan'));
         
         // 允许单源配置 (length >= 1)
         if (parts.length < 1) return null;

@@ -671,25 +671,6 @@ export default class TencentSource extends BaseSource {
 
     log("info", `[tencent] vid: ${vid}`);
 
-    // 获取页面标题
-    let res;
-    try {
-      res = await httpGet(id, {
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        },
-      });
-    } catch (error) {
-      log("error", "[tencent] 请求页面失败:", error);
-      return [];
-    }
-
-    // 使用正则表达式提取 <title> 标签内容
-    const titleMatch = res.data.match(/<title[^>]*>(.*?)<\/title>/i);
-    const title = titleMatch ? titleMatch[1].split("_")[0] : "未知标题";
-    log("info", `[tencent] 标题: ${title}`);
-
     // 获取弹幕分段数据
     const segmentResult = await this.getEpisodeDanmuSegments(id);
     if (!segmentResult || !segmentResult.segmentList || segmentResult.segmentList.length === 0) {

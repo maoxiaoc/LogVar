@@ -526,6 +526,7 @@ export function findAnimeTitleById(id) {
 
 // 添加 anime 对象到 animes，并将其 links 添加到 episodeIds
 export function addAnime(anime, detailStore = null) {
+    if (detailStore?.__searchScope?.closed) return false;
     anime = Anime.fromJson(anime);
     try {
         // 确保 anime 有 links 属性且是数组

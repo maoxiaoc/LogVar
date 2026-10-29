@@ -3,6 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 const appRoot = process.argv[2];
 process.chdir(appRoot);
+process.env.LOGVAR_ANDROID = '1';
 const configDir = path.join(appRoot, 'config');
 const cacheDir = path.join(appRoot, '.cache');
 fs.mkdirSync(configDir, { recursive: true });
@@ -13,9 +14,9 @@ if (!fs.existsSync(envPath)) {
   const admin = crypto.randomBytes(16).toString('hex');
   fs.writeFileSync(envPath, [
     `TOKEN=${token}`, `ADMIN_TOKEN=${admin}`,
-    'SOURCE_ORDER=tencent,iqiyi,bilibili,dandan,imgo,youku,renren,hanjutv,aiyifan',
-    'PLATFORM_ORDER=qq,qiyi,bilibili1,dandan,imgo,youku,renren,hanjutv,aiyifan',
-    'MERGE_SOURCE_PAIRS=tencent&iqiyi&bilibili&dandan&imgo&youku&renren&hanjutv&aiyifan',
+    'SOURCE_ORDER=tencent,iqiyi,bilibili,dandan,imgo,youku,renren,hanjutv',
+    'PLATFORM_ORDER=qq,qiyi,bilibili1,dandan,imgo,youku,renren,hanjutv',
+    'MERGE_SOURCE_PAIRS=tencent&iqiyi&bilibili&dandan&imgo&youku&renren&hanjutv',
     'SEARCH_CACHE_MINUTES=10', 'COMMENT_CACHE_MINUTES=30', 'RATE_LIMIT_MAX_REQUESTS=30'
   ].join('\n'));
 }
